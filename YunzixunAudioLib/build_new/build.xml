@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="GBK"?>
+
+<!-- 步骤   
+    1.用aapt生成R.java  
+    2.JAVAC编译JAVA文件  
+    3.批处理生成classes.dex  
+    4.aapt打包资源   
+    5.apkbuilder包资源和类文件为APK文件  
+    6.jarsinger 对APK进行签名
+-->
+
+<project name="YZX" default="zipalign" basedir="../">
+	
+	<!-- 属性文件位置-->
+	<property file="build_new/build.properties" />
+	<!-- 混淆jar文件 -->
+	<property name="proguard-home" value="build_new/proguard4.10" />
+	
+	
+	
+	<!-- 定义自己的输出目录 -->
+	<property name="outdir" value="${outdir.dir}" />
+	<property name="outdir-ospath" location="${basedir}/${outdir}" />
+	<!-- 输出目录 -->
+	<property name="outdir-classes" value="${outdir}/classes" />
+	<property name="outdir.classes.absolute" location="${basedir}/${outdir-classes}" />
+
+	
+	
+	<!-- 定义 R.java 所有目录 -->
+	<property name="outdir-gen" value="${basedir}/gen" />
+	<!-- 读取 需要的文件目录 -->
+	<property name="src-dir" value="${basedir}/src" />
+	<property name="res-dir" value="${basedir}/res" />
+	<property name="assets-dir" value="${basedir}/assets" />
+	<property name="external-libs" value="${basedir}/libs" />
+	<property name="AndroidManifest-file" value="${basedir}/AndroidManifest.xml" />
+	<property name="proguard-cfg" value="${basedir}/proguard.cfg" />
+	<!-- 临时类资源文件 -->
+	<property name="dex-file" value="classes.dex" />
+	<property name="intermediate-dex" value="${outdir-ospath}/${dex-file}" />
+	
+	
+	<!-- 要使用的工具 -->
+	<property name="aapt" value="${sdk-platform-tools}/aapt.exe" />
+	<property name="aidl" value="${sdk-platform-tools}/aidl.exe" />
+	<property name="dx" value="${sdk-platform-tools}/dx.bat" />
+	<property name="adb" value="${sdk-platform-tools}/adb" />
+	<property name="apk-builder" value="${sdk-tools}/apkbuilder.bat" />
+	<property name="android-jar" value="${sdk-platform}/android.jar" />
+	<!--签名工具-->
+	<property name="jarsigner" value="${jdk-home}/bin/jarsigner.exe" />
+	<!--优化APK工具-->
+	<property name="zipalign" value="${sdk-tools}/zipalign.exe" />
+
+	
+	
+	<!-- 最终生成文件
+	<property name="out-package" value="${outdir}/${ant.project.name}.apk" /> -->
+	<!-- 最终生成各种包文件 -->
+	<property name="resources-package" value="${outdir}/${app.name}_${app.version}" />
+	<property name="resources-package-ospath" value="${basedir}/${resources-package}" />
+	
+	<property name="out-unsigned-package" value="${outdir}/${app.name}_${app.version}-unsigned.apk" />
+	<property name="out-unsigned-package-ospath" value="${basedir}/${out-unsigned-package}" />
+	
+	<property name="out-signed-package" value="${outdir}/${app.name}_${app.version}-signed.apk" />
+	<property name="out-signed-package-ospath" value="${basedir}/${out-signed-package}" />
+	
+	<property name="zipalign-package" value="${outdir}/${app.name}_${app.version}_release.apk" />
+	<property name="zipalign-package-ospath" value="${basedir}/${zipalign-package}" />
+	
+	
+
+	<!-- 初始化 -->
+	<target name="init">
+		<echo>Creating all output directories </echo>
+		<delete dir="${outdir}" />
+		<delete dir="${outdir-classes}" />
+		<delete dir="${outdir-gen}" />
+		<mkdir dir="${outdir}" />
+		<mkdir dir="${outdir-classes}" />
+		<mkdir dir="${outdir-gen}" />
+	</target>
+
+	<!--步骤 1： aapt生成R.java -->
+	<target name="resource-src" depends="init">
+		<echo>Generating R.java...</echo>
+		<exec executable="${aapt}" failonerror="true">
+			<arg value="package" />
+			<arg value="-m" />
+			<arg value="-J" />
+			<arg value="${outdir-gen}" />
+			<arg value="-M" />
+			<arg value="${AndroidManifest-file}" />
+			<arg value="-S" />
+			<arg value="${res-dir}" />
+			<arg value="-I" />
+			<arg value="${android-jar}" />
+		</exec>
+	</target>
+
+	<!-- Generate java classes from .aidl files. -->
+	<target name="aidl" depends="init">
+		<echo>Compiling aidl files into Java classes...</echo>
+		<apply executable="${aidl}" failonerror="true">
+			<arg value="-p${android-framework}" />
+			<arg value="-I${src-dir}" />
+			<fileset dir="${src-dir}">
+				<include name="**/*.aidl" />
+			</fileset>
+		</apply>
+	</target>
+
+	<!-- 步骤 2. 编译所有class文件 -->
+	<target name="compile" depends="init, resource-src, aidl">
+		<javac encoding="GBK" target="${jdk_version}" debug="true" extdirs="" srcdir="${outdir-gen}" destdir="${outdir-classes}" bootclasspath="${android-jar}">
+			<classpath>
+				<fileset dir="${external-libs}" includes="*.jar" />
+			</classpath>
+		</javac>
+		<javac encoding="GBK" target="${jdk_version}" debug="true" extdirs="" srcdir="${src-dir}" destdir="${outdir-classes}" bootclasspath="${android-jar}">
+			<classpath>
+				<fileset dir="${external-libs}" includes="*.jar" />
+			</classpath>
+		</javac>
+	</target>
+
+	<!-- 混淆代码 主要是打包我们的sdk -->
+	<target name="proguard" depends="compile">
+		<jar basedir="${outdir-classes}" destfile="${outdir}/temp_yunzixun_SDK_${app.version}.jar" excludes="com/yunzixun/sample/*,com/yunzixun/sample"/>
+		<java jar="${proguard-home}/proguard.jar" fork="true" failonerror="true">
+			<jvmarg value="-Dmaximum.inlined.code.length=32" />
+			
+			<arg value="-injars ${outdir}/temp_yunzixun_SDK_${app.version}.jar" />
+			<arg value="-outjars ${outdir}/yunzixun_SDK_${app.version}.jar" />
+			<arg value="-libraryjars ${android-jar}" />
+			<arg value="-libraryjars ${external-libs}/"/>
+			
+			<!-- 和proguard.cfg配置相同啦
+			<arg value="-optimizationpasses 5" />
+			<arg value="-dontusemixedcaseclassnames" />
+			<arg value="-dontskipnonpubliclibraryclasses" />
+			<arg value="-dontpreverify" />
+			<arg value="-verbose" />-->
+			
+			<arg value="-dontskipnonpubliclibraryclassmembers" />
+			<arg value="-dontoptimize" />
+			<arg value="-allowaccessmodification" />
+			<arg value="-repackageclasses 'com.yunzixun.V100'" />
+			
+			<!-- 要保留自己的主ACTIVITY类 
+			<arg value="-keep public class com.jzmob.sample.IndexActivity" />-->
+			
+			<!-- 要保留不混淆的，全部放在这个proguard.cfg文件中去实现 -->
+			<arg value="@${proguard-cfg}"/>
+		
+		</java>
+
+		<!--<delete file="${outdir}/yunzixun_SDK_${app.version}.jar" />
+		<delete dir="${outdir-classes}" />
+		<mkdir dir="${outdir-classes}" />
+		<unzip src="${outdir}/yunzixunSDK_${app.version}.jar" dest="${outdir-classes}" />
+		<delete file="${outdir}/yunzixunSDK_${app.version}.jar" /> 
+		mce_src="${outdir}/jzadSDK_${app.version}.jar"-->
+	</target>
+	
+	<!-- 混淆代码 主要是打包我们的APK -->
+	<target name="proguard_APK" depends="compile">
+			<jar basedir="${outdir-classes}" destfile="${outdir}/temp_yunzixun_APK_${app.version}.jar"/>
+			<java jar="${proguard-home}/proguard.jar" fork="true" failonerror="true">
+				<jvmarg value="-Dmaximum.inlined.code.length=32" />
+				
+				<arg value="-injars ${outdir}/temp_yunzixun_APK_${app.version}.jar" />
+				<arg value="-outjars ${outdir}/yunzixun_APK_${app.version}.jar" />
+				<arg value="-libraryjars ${android-jar}" />
+				<arg value="-libraryjars ${external-libs}/"/>
+				
+				<!-- 和proguard.cfg配置相同啦
+				<arg value="-optimizationpasses 5" />
+				<arg value="-dontusemixedcaseclassnames" />
+				<arg value="-dontskipnonpubliclibraryclasses" />
+				<arg value="-dontpreverify" />
+				<arg value="-verbose" />-->
+				
+				<arg value="-dontskipnonpubliclibraryclassmembers" />
+				<arg value="-dontoptimize" />
+				<arg value="-allowaccessmodification" />
+				<arg value="-repackageclasses 'com.yunzixun.V100'" />
+				
+				<!-- 要保留自己的主ACTIVITY类 
+				<arg value="-keep public class com.jzmob.sample.IndexActivity" />-->
+				
+				<!-- 要保留不混淆的，全部放在这个proguard.cfg文件中去实现 -->
+				<arg value="@${proguard-cfg}"/>
+					
+			</java>
+
+			<delete file="${outdir}/temp_yunzixun_APK_${app.version}.jar" />
+			<delete dir="${outdir-classes}" />
+			<mkdir dir="${outdir-classes}" />
+			<unzip src="${outdir}/yunzixun_APK_${app.version}.jar" dest="${outdir-classes}" />
+			<delete file="${outdir}/yunzixun_APK_${app.version}.jar" /> 
+		    <!-- mce_src="${outdir}/APK_${app.version}.jar"-->
+		</target>
+
+	<!-- 步骤 3. 转换class文件为dex文件  -->
+	<target name="dex" depends="proguard, proguard_APK">
+		<echo>Converting compiled files into ${intermediate-dex}... </echo>
+		<!-- 只是将自己的classes文件打包到apk做法（肯定lib不全）
+		  <exec executable="${dx}" failonerror="true">
+			<arg value="- -dex" />
+			<arg value="- -output=${intermediate-dex}" />
+			<arg path="${outdir.classes.absolute}" />
+		</exec>-->
+		<!-- 需要将外部lib一起打包为完成的apk做法-->
+		<apply executable="${dx}" failonerror="true" parallel="true">
+			<arg value="--dex" />
+			<arg value="--output=${intermediate-dex}" />
+			<arg path="${outdir.classes.absolute}" />
+			<fileset dir="${external-libs}" includes="*.jar" />
+		</apply>
+	</target>
+
+	<!-- 步骤 4. 将资源和清单打包 -->
+	<target name="package-res-and-assets">
+		<echo>Packaging resources and assets...</echo>
+		<exec executable="${aapt}" failonerror="true">
+			<arg value="package" />
+			<arg value="-f" />
+			<arg value="-M" />
+			<arg value="${AndroidManifest-file}" />
+			<arg value="-S" />
+			<arg value="${res-dir}" />
+			<arg value="-A" />
+			<arg value="${assets-dir}" />
+			<arg value="-I" />
+			<arg value="${android-jar}" />
+			<arg value="-F" />
+			<arg value="${resources-package}" />
+		</exec>
+	</target>
+
+	<!-- 步骤 5. 将打好的包编译为APK文件 -->
+	<target name="debug" depends="dex, package-res-and-assets">
+		<echo>release:Packaging ${out-unsigned-package-ospath}, and signing it with a debug key...</echo>
+		<exec executable="${apk-builder}" failonerror="true">
+			<arg value="${out-unsigned-package-ospath}" />
+			<arg value="-u" />
+			<arg value="-z" />
+			<arg value="${resources-package-ospath}" />
+			<arg value="-f" />
+			<arg value="${intermediate-dex}" />
+			<arg value="-rf" />
+			<arg value="${src-dir}" />
+		</exec>
+	</target>
+
+	<!--步骤 6. 签名APK文件 -->
+	<target name="jarsigner" depends="debug">
+		<echo> jarsigner ${out-signed-package-ospath}</echo>
+		<exec executable="${jarsigner}" failonerror="true">
+			<arg value="-verbose" />
+			<arg value="-storepass" />
+			<arg value="${keystore.password}" />
+			<arg value="-keystore" />
+			<arg value="${keystore.file}" />
+			<arg value="-signedjar" />
+			<arg value="${out-signed-package-ospath}" />
+			<arg value="${out-unsigned-package-ospath}" />
+			<arg value="${keystore.name}" />
+		</exec>
+	</target>
+
+	<!--zipalign优化android程序-->
+	<target name="zipalign" depends="jarsigner">
+		<echo> zipalign ${zipalign-package-ospath}</echo>
+		<exec executable="${zipalign}" failonerror="true">
+			<arg value="-v" />
+			<arg value="-f" />
+			<arg value="4" />
+			<arg value="${out-signed-package-ospath}" />
+			<arg value="${zipalign-package-ospath}" />
+		</exec>
+		
+		<delete file="${resources-package-ospath}" />
+		<delete file="${out-unsigned-package-ospath}" />
+		<delete file="${out-signed-package-ospath}" />
+		<delete file="${intermediate-dex}" />
+		<delete dir="${outdir.classes.absolute}" />
+			
+	</target>
+
+	<!-- 安装到默认的手机或模拟器-->
+	<target name="install" depends="zipalign">
+		<echo>Installing ${out-debug-package} onto default emulator...</echo>
+		<exec executable="${adb}" failonerror="true">
+			<arg value="install" />
+			<arg value="${out-signed-package}" />
+		</exec>
+	</target>
+
+</project>
