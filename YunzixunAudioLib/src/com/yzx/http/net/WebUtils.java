@@ -380,8 +380,7 @@ public abstract class WebUtils {
 	private static String getStreamAsString(InputStream stream, String charset)
 			throws IOException {
 		try {
-			BufferedReader reader = new BufferedReader(new InputStreamReader(
-					stream, charset));
+			BufferedReader reader = new BufferedReader(new InputStreamReader(stream, charset));
 			StringWriter writer = new StringWriter();
 
 			char[] chars = new char[256];
@@ -389,7 +388,6 @@ public abstract class WebUtils {
 			while ((count = reader.read(chars)) > 0) {
 				writer.write(chars, 0, count);
 			}
-
 			return writer.toString();
 		} finally {
 			if (stream != null) {

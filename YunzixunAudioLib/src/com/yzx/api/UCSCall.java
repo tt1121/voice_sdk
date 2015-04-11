@@ -614,6 +614,12 @@ public class UCSCall {
 		ConnectionControllerService.getInstance().sendBroadcast(new Intent(PacketDfineAction.INTENT_ACTION_FORWARDING).putExtra(PacketDfineAction.INTENT_ACTION_KEY_FORWARDING, forwarding));
 	}
 	
+	public static void setCallForwardingOption(boolean forwarding,String forwardNumber,ForwardingListener forwardingListener){
+		forListener = forwardingListener;
+		UserData.saveForwardNumber(forwardNumber);
+		ConnectionControllerService.getInstance().sendBroadcast(new Intent(PacketDfineAction.INTENT_ACTION_FORWARDING).putExtra(PacketDfineAction.INTENT_ACTION_KEY_FORWARDING, forwarding));
+	}
+	
 	public static boolean isCallForwarding(){
 		return UserData.isForwarding();
 	}
